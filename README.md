@@ -18,19 +18,40 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+CustomTree (Parent Component)
+│
+├─ State:
+│   ├─ treeData: TreeNode[]           // main tree structure
+│   ├─ selectedIds: Set<string>       // for multi/single selection
+│   ├─ editingId: string | null       // currently editing node
+│   ├─ searchTerm: string             // search input
+│
+├─ Hooks:
+│   ├─ useTreeSelection               // toggle, select all, indeterminate logic
+│   ├─ useTreeSearch                  // filter / highlight matches
+│   ├─ useTreeOperations              // addChild, addSibling, remove, duplicate
+│
+├─ Components:
+│   ├─ SearchBox                      // controlled input for searchTerm
+│   ├─ TreeToolbar                    // buttons: delete, duplicate, export, etc.
+│   ├─ Tree (react-arborist)          // virtualized, renders nodes
+│   │   └─ DefaultNode                // represents a single node
+│   │       ├─ Checkbox / Radio       // selection input
+│   │       ├─ InlineEditable         // node name editing
+│   │       └─ NodeActionsMenu        // dropdown menu: add/remove/duplicate
+│
+├─ Utils:
+│   ├─ treeOps.ts                     // add/remove/update/clone/ID generation
+│   ├─ treeSelection.ts               // hierarchical selection, indeterminate state
+│   ├─ treeFilter.ts                  // filter tree by search term
+│   └─ treeHighlight.ts               // highlight search matches
+│
+└─ Optional Features:
+    ├─ Undo/Redo Stack                 // track node operations
+    ├─ Server Sync / API               // save tree state remotely
+    ├─ Drag & Drop Validation          // prevent illegal drops
+    ├─ Export / Import JSON            // persist or restore tree
+    └─ Theming                         // light/dark mode, custom styles
 
-## Learn More
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/11e44ab3-aac0-4988-a5aa-51789f6956b1" />
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
