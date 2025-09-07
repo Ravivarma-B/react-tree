@@ -1,6 +1,29 @@
 import { TreeNode, TreeSchema } from "../zod/treeSchema";
 import { cloneDeep, findNodeAndParent, nextId, removeIds } from "./treeUtils";
 
+/**
+ * Assign new IDs recursively to a node and its children.
+ */
+function assignIdsRecursive(node: Omit<TreeNode, "id">): TreeNode {
+  const newNode: TreeNode = {
+    ...node,
+    id: nextId("node"),
+    children: node.children?.map(assignIdsRecursive),
+  };
+  return newNode;
+}
+
+/**
+ * Generate a tree with fresh IDs for all nodes.
+ * @param treeData Array of tree nodes without IDs
+ */
+export function generateTreeWithIds(
+  treeData: Omit<TreeNode, "id">[]
+): TreeNode[] {
+  const newTree = treeData.map(assignIdsRecursive);
+  return TreeSchema.parse(newTree); // validates the new tree
+}
+
 export function assignNewIds(node: TreeNode): TreeNode {
   const newNode: TreeNode = {
     ...node,
@@ -72,6 +95,39 @@ export function updateNodeName(
   const copy = cloneDeep(nodes);
   const { node } = findNodeAndParent(copy, nodeId);
   if (node) node.name = newName;
+  return TreeSchema.parse(copy);
+}
+
+export function updateNodeIcon(
+  nodes: TreeNode[],
+  nodeId: string,
+  icon: string
+) {
+  const copy = cloneDeep(nodes);
+  const { node } = findNodeAndParent(copy, nodeId);
+  if (node) node.icon = icon;
+  return TreeSchema.parse(copy);
+}
+
+/**
+ * Force update all parent nodes' icons in the tree to a given icon.
+ */
+export function updateAllParentIcons(
+  nodes: TreeNode[],
+  icon: string
+): TreeNode[] {
+  const copy = cloneDeep(nodes);
+
+  function dfs(node: TreeNode) {
+    // If it has children, set parent icon
+    if (node.children) {
+      node.icon = icon;
+      node.children.forEach(dfs);
+    }
+  }
+
+  copy.forEach(dfs);
+
   return TreeSchema.parse(copy);
 }
 
@@ -189,4 +245,37 @@ export function moveNodes(
   }
 
   return newTree;
+}
+
+/**
+ * Returns an array of booleans representing whether each ancestor of the node
+ * is the last child in its parent. The array is ordered from root -> parent.
+ */
+export function buildAncestorLastMap(
+  nodeId: string,
+  treeData: TreeNode[]
+): boolean[] {
+  const path: boolean[] = [];
+  let currentId = nodeId;
+
+  while (true) {
+    const { node, parent } = findNodeAndParent(treeData, currentId);
+    if (!node) break;
+
+    if (parent) {
+      const siblings = parent.children ?? [];
+      const lastChildId =
+        siblings.length > 0 ? siblings[siblings.length - 1].id : null;
+
+      const isLast = node.id === lastChildId;
+      path.unshift(isLast);
+
+      currentId = parent.id;
+    } else {
+      // reached root
+      break;
+    }
+  }
+
+  return path;
 }

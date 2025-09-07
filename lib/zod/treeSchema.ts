@@ -4,13 +4,13 @@ import { z } from "zod";
 export const TreeNodeSchema: z.ZodType<{
   id: string;
   name: string;
-  status?: string;
+  icon?: string;
   children?: TreeNode[];
 }> = z.lazy(() =>
   z.object({
     id: z.string().min(1, "ID is required"),
     name: z.string().min(1, "Name is required").max(100, "Name too long"),
-    status: z.string().optional(), // optional badge/status
+    icon: z.string().optional(),
     children: z.array(TreeNodeSchema).optional(),
   })
 );
