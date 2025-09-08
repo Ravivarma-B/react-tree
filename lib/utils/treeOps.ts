@@ -1,104 +1,187 @@
-import { TreeNode, TreeNodeSchema, TreeSchema } from "../zod/treeSchema";
+import { TreeNode, TreeSchema } from "../zod/treeSchema";
 import { cloneDeep, findNodeAndParent, nextId, removeIds } from "./treeUtils";
 
-// Validate whole tree after mutation
-function validateTree(nodes: TreeNode[]): TreeNode[] {
-  return TreeSchema.parse(nodes); // throws if invalid
+/**
+ * Assign new IDs recursively to a node and its children.
+ */
+function assignIdsRecursive(node: Omit<TreeNode, "id">): TreeNode {
+  const newNode: TreeNode = {
+    ...node,
+    id: nextId("node"),
+    children: node.children?.map(assignIdsRecursive),
+  };
+  return newNode;
+}
+
+/**
+ * Generate a tree with fresh IDs for all nodes.
+ * @param treeData Array of tree nodes without IDs
+ */
+export function generateTreeWithIds(
+  treeData: Omit<TreeNode, "id">[]
+): TreeNode[] {
+  const newTree = treeData.map(assignIdsRecursive);
+  return TreeSchema.parse(newTree); // validates the new tree
+}
+
+export function assignNewIds(node: TreeNode): TreeNode {
+  const newNode: TreeNode = {
+    ...node,
+    id: nextId("node"),
+    children: node.children?.map(assignNewIds),
+  };
+  TreeSchema.parse([newNode]); // validate
+  return newNode;
 }
 
 export function addSiblingNode(
   nodes: TreeNode[],
   nodeId: string,
-  name: string = "New Sibling",
-  isLeafNode: boolean = false
+  name = "New Sibling",
+  isLeafNode = false
 ): TreeNode[] {
   const copy = cloneDeep(nodes);
   const { parent, index } = findNodeAndParent(copy, nodeId);
-
-  const newNode: TreeNode = {
-    id: nextId("sibling"),
+  const newNode: TreeNode = assignNewIds({
+    id: "",
     name,
     ...(!isLeafNode && { children: [] }),
-  };
-  TreeNodeSchema.parse(newNode);
-
+  });
   if (parent) {
     parent.children = parent.children ? [...parent.children] : [];
     parent.children.splice(index + 1, 0, newNode);
   } else {
-    // root-level sibling
     copy.splice(index + 1, 0, newNode);
   }
-
   return TreeSchema.parse(copy);
 }
 
-// ✅ Add Child
 export function addChildNode(
   nodes: TreeNode[],
   parentId: string,
   name: string
-): TreeNode[] {
-  const newNode: TreeNode = {
-    id: nextId("child"),
-    name,
-  };
-  TreeNodeSchema.parse(newNode);
-
+) {
   const copy = cloneDeep(nodes);
   const { node: parent } = findNodeAndParent(copy, parentId);
-  if (parent) {
-    parent.children = parent.children
-      ? [...parent.children, newNode]
-      : [newNode];
-  }
-  return validateTree(copy);
+  if (!parent) return copy;
+  const newNode: TreeNode = assignNewIds({ id: "", name });
+  parent.children = parent.children ? [...parent.children, newNode] : [newNode];
+  return TreeSchema.parse(copy);
 }
 
-// ✅ Duplicate Node
-export function duplicateNode(nodes: TreeNode[], id: string): TreeNode[] {
-  const { node, parent, index } = findNodeAndParent(nodes, id);
-  if (!node) return nodes;
-
+export function duplicateNode(nodes: TreeNode[], nodeId: string): TreeNode[] {
   const copy = cloneDeep(nodes);
-  const duplicate: TreeNode = { ...cloneDeep(node), id: nextId("dup") };
-  TreeNodeSchema.parse(duplicate);
-
+  const { node, parent, index } = findNodeAndParent(copy, nodeId);
+  if (!node) return copy;
+  const duplicate = assignNewIds(node);
   if (parent) {
-    parent.children!.splice(index + 1, 0, duplicate);
+    parent.children = parent.children ? [...parent.children] : [];
+    parent.children.splice(index + 1, 0, duplicate);
   } else {
     copy.splice(index + 1, 0, duplicate);
   }
-  return validateTree(copy);
+  return TreeSchema.parse(copy);
 }
 
-// ✅ Delete Node
-export function deleteNode(nodes: TreeNode[], id: string): TreeNode[] {
-  const updated = removeIds(nodes, new Set([id]));
-  return validateTree(updated);
+export function deleteNode(nodes: TreeNode[], nodeId: string) {
+  return TreeSchema.parse(removeIds(nodes, new Set([nodeId])));
 }
 
 export function updateNodeName(
   nodes: TreeNode[],
-  id: string,
+  nodeId: string,
   newName: string
+) {
+  const copy = cloneDeep(nodes);
+  const { node } = findNodeAndParent(copy, nodeId);
+  if (node) node.name = newName;
+  return TreeSchema.parse(copy);
+}
+
+export function updateNodeIcon(
+  nodes: TreeNode[],
+  nodeId: string,
+  icon: string
+) {
+  const copy = cloneDeep(nodes);
+  const { node } = findNodeAndParent(copy, nodeId);
+  if (node) node.icon = icon;
+  return TreeSchema.parse(copy);
+}
+
+/**
+ * Force update all parent nodes' icons in the tree to a given icon.
+ */
+export function updateAllParentIcons(
+  nodes: TreeNode[],
+  icon: string
 ): TreeNode[] {
   const copy = cloneDeep(nodes);
-  const { node } = findNodeAndParent(copy, id);
-  if (node) {
-    node.name = newName;
+
+  function dfs(node: TreeNode) {
+    // If it has children, set parent icon
+    if (node.children) {
+      node.icon = icon;
+      node.children.forEach(dfs);
+    }
   }
-  return TreeSchema.parse(copy); // validate with Zod
+
+  copy.forEach(dfs);
+
+  return TreeSchema.parse(copy);
+}
+
+// Toggle node selection with parent-child propagation
+export function toggleNodeSelection(
+  nodes: TreeNode[],
+  nodeId: string,
+  selectedIds: Set<string>,
+  multiple = true
+): Set<string> {
+  const newSet = new Set(selectedIds);
+
+  const updateChildren = (node: TreeNode, checked: boolean) => {
+    if (checked) newSet.add(node.id);
+    else newSet.delete(node.id);
+    node.children?.forEach((c) => updateChildren(c, checked));
+  };
+
+  const traverse = (nodes: TreeNode[]) => {
+    for (const node of nodes) {
+      if (node.id === nodeId) {
+        const checked = multiple ? !newSet.has(node.id) : true;
+        if (!multiple) newSet.clear();
+        updateChildren(node, checked);
+        break;
+      }
+      node.children && traverse(node.children);
+    }
+  };
+  traverse(nodes);
+  return newSet;
+}
+
+// Determine indeterminate state for parent checkboxes
+export function isIndeterminate(
+  node: TreeNode,
+  selectedIds: Set<string>
+): boolean {
+  if (!node.children || node.children.length === 0) return false;
+  const allSelected = node.children.every((c) => selectedIds.has(c.id));
+  const someSelected = node.children.some(
+    (c) => selectedIds.has(c.id) || isIndeterminate(c, selectedIds)
+  );
+  return someSelected && !allSelected;
 }
 
 export function filterTree(nodes: TreeNode[], term: string): TreeNode[] {
   if (!term.trim()) return nodes;
 
   const lower = term.toLowerCase();
-
   return nodes
     .map((node) => {
       const children = filterTree(node.children ?? [], term);
+      // include node if it matches or has matching children
       if (node.name.toLowerCase().includes(lower) || children.length > 0) {
         return { ...node, ...(children.length > 0 && { children }) };
       }
@@ -107,48 +190,92 @@ export function filterTree(nodes: TreeNode[], term: string): TreeNode[] {
     .filter(Boolean) as TreeNode[];
 }
 
-export function toggleNodeSelection(
-  nodes: TreeNode[],
-  nodeId: string,
-  selectedIds: Set<string>,
-  multiple: boolean
-): Set<string> {
-  const newSet = new Set(selectedIds);
+export function moveNodes(
+  tree: TreeNode[],
+  dragIds: string[],
+  parentId: string | null,
+  index: number
+): TreeNode[] {
+  // Deep clone tree
+  let newTree = structuredClone(tree) as TreeNode[];
 
-  const updateChildren = (node: TreeNode, checked: boolean) => {
-    if (checked) newSet.add(node.id);
-    else newSet.delete(node.id);
-    node.children?.forEach((child) => updateChildren(child, checked));
-  };
+  // Helper to remove nodes
+  function remove(nodes: TreeNode[]): [TreeNode[], TreeNode[]] {
+    const removed: TreeNode[] = [];
+    const kept: TreeNode[] = [];
 
-  const traverse = (nodes: TreeNode[]) => {
-    for (const node of nodes) {
-      if (node.id === nodeId) {
-        const isChecked = newSet.has(node.id);
-        const checked = multiple ? !isChecked : true;
-        if (!multiple) newSet.clear(); // single select clears previous
-        updateChildren(node, checked);
-        break;
+    for (const n of nodes) {
+      if (dragIds.includes(n.id)) {
+        removed.push(n);
+      } else if (n.children) {
+        const [childRemoved, childKept] = remove(n.children);
+        if (childRemoved.length) {
+          n.children = childKept;
+          removed.push(...childRemoved);
+        }
+        kept.push(n);
+      } else {
+        kept.push(n);
       }
-      if (node.children) traverse(node.children);
     }
-  };
+    return [removed, kept];
+  }
 
-  traverse(nodes);
-  return newSet;
+  // Remove dragged nodes
+  const [removed, cleaned] = remove(newTree);
+  newTree = cleaned;
+
+  // Insert into new parent
+  function insert(nodes: TreeNode[]): boolean {
+    for (const n of nodes) {
+      if (n.id === parentId) {
+        n.children = n.children || [];
+        n.children.splice(index, 0, ...removed);
+        return true;
+      }
+      if (n.children && insert(n.children)) return true;
+    }
+    return false;
+  }
+
+  if (parentId) {
+    insert(newTree);
+  } else {
+    newTree.splice(index, 0, ...removed);
+  }
+
+  return newTree;
 }
 
-// Compute if a node should be indeterminate
-export function isIndeterminate(
-  node: TreeNode,
-  selectedIds: Set<string>
-): boolean {
-  if (!node.children || node.children.length === 0) return false;
-  const allChildrenSelected = node.children.every((child) =>
-    selectedIds.has(child.id)
-  );
-  const someChildrenSelected = node.children.some(
-    (child) => selectedIds.has(child.id) || isIndeterminate(child, selectedIds)
-  );
-  return someChildrenSelected && !allChildrenSelected;
+/**
+ * Returns an array of booleans representing whether each ancestor of the node
+ * is the last child in its parent. The array is ordered from root -> parent.
+ */
+export function buildAncestorLastMap(
+  nodeId: string,
+  treeData: TreeNode[]
+): boolean[] {
+  const path: boolean[] = [];
+  let currentId = nodeId;
+
+  while (true) {
+    const { node, parent } = findNodeAndParent(treeData, currentId);
+    if (!node) break;
+
+    if (parent) {
+      const siblings = parent.children ?? [];
+      const lastChildId =
+        siblings.length > 0 ? siblings[siblings.length - 1].id : null;
+
+      const isLast = node.id === lastChildId;
+      path.unshift(isLast);
+
+      currentId = parent.id;
+    } else {
+      // reached root
+      break;
+    }
+  }
+
+  return path;
 }

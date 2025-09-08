@@ -2,7 +2,7 @@
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown, ChevronRightIcon, MoreHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NodeApi, Tree } from "react-arborist";
 import InlineEditable from "./inline-editable";
 import { cn } from "../utils/FormUtils";
@@ -199,6 +199,18 @@ export const CustomTree = ({ data, multiple = false }: CustomTreeProps) => {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  const filteredData = useMemo(
+    () => filterTree(treeData, debouncedSearch),
+    [treeData, debouncedSearch]
+  );
+
   const treeProps = useMemo(
     () => ({
       data: treeData,
@@ -212,8 +224,6 @@ export const CustomTree = ({ data, multiple = false }: CustomTreeProps) => {
     }),
     [treeData]
   );
-
-  const filteredData = filterTree(treeData, search);
 
   const getSelectedItems = () => {
     const result: TreeNode[] = [];

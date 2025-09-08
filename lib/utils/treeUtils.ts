@@ -69,7 +69,7 @@ export function nextId(prefix = "node") {
 }
 export function sampleData(): TreeNode[] {
   const root: TreeNode[] = [];
-  for (let i = 0; i < 5000; i++) {
+  for (let i = 0; i < 500; i++) {
     const node: TreeNode = { id: `n-${i}`, name: `Item ${i}`, children: [] };
     for (let j = 0; j < 10; j++) {
       node.children!.push({ id: ` n-${i}-${j}`, name: `Item ${i}.${j}` });

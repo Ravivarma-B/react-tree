@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { cn } from "../utils/FormUtils";
 import { z } from "zod";
+
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 const NameSchema = z.string().min(1, "Name cannot be empty").max(100);
 
@@ -12,10 +14,13 @@ interface InlineEditableProps {
   noOutline?: boolean;
   elementClassName?: string;
   placeholder?: string;
+  viewOnly?: boolean;
   children?: React.ReactNode;
+  textClassName?: string;
+  onEditingChange?: (editing: boolean) => void; // NEW
 }
 
-export const InlineEditable: React.FC<InlineEditableProps> = ({
+const InlineEditable: React.FC<InlineEditableProps> = ({
   text,
   onSave,
   multiline = false,
@@ -24,22 +29,31 @@ export const InlineEditable: React.FC<InlineEditableProps> = ({
   placeholder = "Click to edit",
   noOutline,
   children,
+  viewOnly = false,
+  textClassName = "",
+  onEditingChange,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(text);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
-  // Focus input when editing starts
+  // Sync external text only when not editing
+  useEffect(() => {
+    if (!isEditing && text !== value) {
+      setValue(text);
+    }
+  }, [text, isEditing, value]);
+
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [isEditing]);
+    onEditingChange?.(isEditing); // notify parent
+  }, [isEditing, onEditingChange]);
 
   const handleBlur = () => {
-    setIsEditing(false);
     try {
       const valid = NameSchema.parse(value);
       setError(null);
@@ -47,16 +61,23 @@ export const InlineEditable: React.FC<InlineEditableProps> = ({
     } catch (err) {
       if (err instanceof z.ZodError) {
         setError(err.issues[0].message);
+        inputRef.current?.focus(); // stay focused to fix error
+        return;
       }
+    } finally {
+      setIsEditing(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !multiline) {
-      inputRef.current?.blur();
-    }
+    e.stopPropagation(); // 🚀 prevent Arborist stealing keys
 
-    if (e.key === "Escape") {
+    if (e.key === "Enter") {
+      if (!multiline) {
+        e.preventDefault();
+        inputRef.current?.blur();
+      }
+    } else if (e.key === "Escape") {
       setValue(text);
       setIsEditing(false);
     }
@@ -73,10 +94,10 @@ export const InlineEditable: React.FC<InlineEditableProps> = ({
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="border px-2 py-1 rounded w-full"
+            className={cn("border px-2 py-1 rounded w-full", elementClassName)}
           />
         ) : (
-          <input
+          <Input
             ref={inputRef as React.RefObject<HTMLInputElement>}
             type="text"
             value={value}
@@ -93,12 +114,17 @@ export const InlineEditable: React.FC<InlineEditableProps> = ({
         )
       ) : (
         <span
-          onClick={() => setIsEditing(true)}
-          className={`cursor-text ${!text ? "text-gray-400" : ""}`}
+          onClick={() => (!viewOnly ? setIsEditing(true) : undefined)}
+          className={cn(
+            `${!text ? "text-gray-400" : ""}`,
+            textClassName,
+            viewOnly ? "" : "cursor-text"
+          )}
         >
           {children || text}
         </span>
       )}
+      {error && <div className="text-red-500 text-xs mt-1">{error}</div>}
     </div>
   );
 };
